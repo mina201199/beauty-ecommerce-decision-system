@@ -361,5 +361,5 @@ st.caption(
     "資料集：[eCommerce Events History in Cosmetics Shop]"
     "(https://www.kaggle.com/datasets/mkechinov/ecommerce-events-history-in-cosmetics-shop)"
     " by REES46 Marketing Platform　|　"
-    "程式碼：[github.com/ruru0109lee-cpu/ML](https://github.com/ruru0109lee-cpu/ML)"
+    "程式碼：[github.com/ruru0109lee-cpu/beauty-ecommerce-decision-system](https://github.com/ruru0109lee-cpu/beauty-ecommerce-decision-system)"
 )

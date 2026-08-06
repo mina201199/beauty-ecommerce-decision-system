@@ -375,7 +375,28 @@ streamlit run app.py
 
 ---
 
-## 資料授權
+## 資料授權與致謝
 
-資料集由 REES46 Marketing Platform 提供，可免費使用並須標註來源。
+| 資料集 | 提供者 | 授權 |
+|---|---|---|
+| [eCommerce Events History in Cosmetics Shop](https://www.kaggle.com/datasets/mkechinov/ecommerce-events-history-in-cosmetics-shop) | [REES46 Marketing Platform](https://rees46.com/) via Open CDP | 免費使用，須標註來源 |
+| [Sephora Products and Skincare Reviews](https://www.kaggle.com/datasets/nadyinky/sephora-products-and-skincare-reviews) | Nady Inky | CC BY 4.0 |
+
 本專案程式碼僅供學習與作品集展示用途。
+
+---
+
+## 這個專案的方法論立場
+
+分析過程中修正了數個會使結論失真的錯誤，全部保留在 commit 紀錄中：
+
+| 錯誤 | 影響 | 修正 |
+|---|---|---|
+| 漏斗階段以獨立計數相除 | 轉換率算出 108% | 改為巢狀計數 |
+| 排行榜門檻設在錯誤的欄位 | 30 次加購的品牌登上放棄率榜首 | 分母對應的欄位加設門檻 |
+| 折扣浪費以全站平均轉換率估算 | 低估約 3 倍 | 改用模型實測涵蓋率 |
+| 排序比較時兩組使用不同公式 | 個人化效果虛高 41% | 兩組共用公式，只換評分來源 |
+| 成分以子字串比對 | 刺激性成分比例灌水 3.4 倍 | 改為詞邊界比對 |
+| 敏感度分析未設合理性上限 | 產出隱含訂單成長 56% 的幻想情境 | 自動標記並排除不可信情境 |
+
+**每一個錯誤修正後的數字都比原本難看。** 保留這些紀錄是因為：分析的價值來自結論可信，而不是結論漂亮。
