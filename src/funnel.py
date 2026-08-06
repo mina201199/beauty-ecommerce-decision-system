@@ -111,12 +111,20 @@ def funnel_metrics(g: pd.DataFrame) -> pd.Series:
     # 沒有瀏覽記錄就直接加購 —— 這是資料品質指標，要一起報告
     n_cart_no_view = int((g["carted"] & ~g["viewed"]).sum())
 
+    # 巢狀計數：畫漏斗圖要用這組，不能用上面的獨立計數。
+    # 用獨立計數畫漏斗，圖上的「階段間百分比」會是 8.31M -> 4.81M = 58%，
+    # 但真正的瀏覽→加購率是 14.98%。圖表與結論互相矛盾是作品集的致命傷。
+    n_vc = n_view_cart
+    n_vcp = int((g["viewed"] & g["carted"] & g["purchased"]).sum())
+
     return pd.Series({
         "配對數": n_pairs,
         "有瀏覽": n_view,
         "有加購": n_cart,
         "有移除": n_remove,
         "有購買": n_purchase,
+        "瀏覽且加購": n_vc,
+        "瀏覽加購且購買": n_vcp,
         "瀏覽→加購%": n_view_cart / n_view * 100 if n_view else np.nan,
         "加購→購買%": n_cart_buy / n_cart * 100 if n_cart else np.nan,
         "加購後放棄%": n_cart_no_buy / n_cart * 100 if n_cart else np.nan,
@@ -142,11 +150,12 @@ def breakdown(pairs: pd.DataFrame, dim: str) -> pd.DataFrame:
 
 def plot_funnel(overall: pd.Series) -> None:
     """畫整體漏斗圖。"""
+    # 用巢狀計數，不是獨立計數 —— 否則圖上的百分比會與結論矛盾
     fig = go.Figure(
         go.Funnel(
-            y=["瀏覽商品", "加入購物車", "完成購買"],
-            x=[overall["有瀏覽"], overall["有加購"], overall["有購買"]],
-            textinfo="value+percent initial",
+            y=["瀏覽商品", "瀏覽後加購", "加購後購買"],
+            x=[overall["有瀏覽"], overall["瀏覽且加購"], overall["瀏覽加購且購買"]],
+            textinfo="value+percent previous",
             marker={"color": ["#5B8FF9", "#5AD8A6", "#F6BD16"]},
         )
     )
