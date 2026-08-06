@@ -14,6 +14,8 @@
 因為前者不依賴任何樂觀假設。
 """
 
+import json
+
 import numpy as np
 import pandas as pd
 
@@ -22,6 +24,7 @@ from src.config import (
     ASSUMED_GROSS_MARGIN,
     EVENT_PURCHASE,
     INTERIM_DIR,
+    MODEL_DIR,
     MONTHS,
     TABLE_DIR,
 )
@@ -35,9 +38,23 @@ TARGET_SHARE = 0.20
 # 那是錯的：模型專門挑高意圖的人，這群人本來就會買的比例遠高於平均，
 # 所以折扣浪費被嚴重低估。
 #
-# 一個堪用的模型，前 20% 大概能涵蓋 50-70% 的購買者。這裡先取 60%，
-# 模組 2 完成後換成實際的 lift curve。
-CAPTURE_RATE = 0.60
+# 這個值直接讀模組 2 訓練出來的實際 lift curve，不寫死。
+# 模型重訓後這裡會自動跟著更新，兩個模組是真的串起來的。
+FALLBACK_CAPTURE_RATE = 0.60
+
+
+def load_capture_rate() -> tuple[float, str]:
+    """從模組 2 的產出讀取實際涵蓋率，讀不到就用保守預設值。"""
+    path = MODEL_DIR / "metrics.json"
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        rate = data.get("capture_rate_top20")
+        if rate:
+            return float(rate), "模組 2 實測"
+    return FALLBACK_CAPTURE_RATE, "預設值（模組 2 尚未訓練）"
+
+
+CAPTURE_RATE, CAPTURE_SOURCE = load_capture_rate()
 
 # 折扣挽回率的假設區間。這是全篇最不確定的參數，所以要做敏感度分析。
 RECOVERY_RATES = [0.01, 0.02, 0.03, 0.05, 0.08, 0.10]
@@ -198,7 +215,7 @@ def main() -> None:
     print("  損益兩平分析")
     print(f"{'=' * 56}")
     print(f"  鎖定比例（前 X% session）{TARGET_SHARE:>18.0%}")
-    print(f"  模型涵蓋率（含多少購買者）{CAPTURE_RATE:>17.0%}")
+    print(f"  模型涵蓋率（含多少購買者）{CAPTURE_RATE:>17.2%}   [{CAPTURE_SOURCE}]")
     print(f"  折扣幅度                 {ASSUMED_DISCOUNT_RATE:>18.2%}")
     print(f"  毛利率                   {ASSUMED_GROSS_MARGIN:>18.2%}")
     print("  ---")
@@ -259,11 +276,17 @@ def main() -> None:
         TABLE_DIR / "breakeven_by_discount.csv", index=False, encoding="utf-8-sig"
     )
 
+    # 這段說明從實際結果算出來，不寫死。硬編碼的數字會在重跑後過期，
+    # 而報表上一個過期的數字就足以讓整份分析失去可信度。
+    first_bad = sens[sens["合理性"] != "合理"]
     print("\n  [!] 這些是情境試算不是實測結果。")
-    print("      模組 2 完成後，鎖定比例會換成模型的實際 lift curve；")
+    print(f"      鎖定比例來自模組 2 的實際 lift curve（{CAPTURE_SOURCE}）；")
     print("      挽回率則必須靠 A/B test 實測，無法從歷史資料推得。")
-    print("      挽回率超過 3% 的情境隱含訂單量成長超過 16%，")
-    print("      沒有促銷方案做得到，因此不納入結論。")
+    if not first_bad.empty:
+        r = first_bad.iloc[0]
+        print(f"      挽回率達到 {r['挽回率假設']:.0%} 時隱含訂單量成長 "
+              f"{r['增額訂單佔現有%']:.1f}%，")
+        print("      已超出促銷方案的合理範圍，故不納入結論。")
     print("\n[OK] 模組 5 骨架完成。表格已存至 outputs/tables/")
 
 

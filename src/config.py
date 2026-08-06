@@ -64,9 +64,25 @@ EVENT_ORDER = [EVENT_VIEW, EVENT_CART, EVENT_REMOVE, EVENT_PURCHASE]
 RANDOM_SEED = 42
 
 # 【防止 Data Leakage 的關鍵設定】
-# 預測「這個 session 會不會購買」時，只能用 session 前 N 分鐘的行為當特徵。
-# 如果用整個 session 的資料，就等於偷看了購買前後的所有動作 → AUC 會假性飆到 0.99。
-OBSERVATION_WINDOW_MINUTES = 10
+#
+# 預測問題定義：
+#   「一個 session 已經瀏覽了 W 分鐘、目前還沒下單，他最終會不會買？」
+#
+#   符合資格的 session 必須：(a) 活過 W 分鐘 (b) 在 W 分鐘內尚未購買。
+#   標籤 = W 分鐘之後是否發生購買。
+#   已經買過的直接排除 —— 沒有東西可預測，留著就是洩漏。
+#
+# W 的選擇依據實際分布（見 src/sessions.py 與
+# outputs/tables/observation_window_tradeoff.csv），不是慣例值：
+#
+#   W(分)   符合資格    正樣本%   保留的購買者%
+#     1    1,249,515    11.08      88.39
+#     3      943,876    13.47      81.21   <-- 採用
+#     5      786,675    14.52      72.96
+#    10      570,990    15.75      57.45   <-- 原本拍腦袋的值，丟掉 43% 購買者
+#
+# 選 3 分鐘：樣本量與訊號量的平衡點，且仍涵蓋八成以上的購買者。
+OBSERVATION_WINDOW_MINUTES = 3
 
 # 時間切分：用前面的月份訓練、最後一個月驗證。
 # 絕對不要用 train_test_split 隨機切！行為資料有時間性，
