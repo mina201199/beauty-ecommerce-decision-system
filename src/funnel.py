@@ -29,9 +29,13 @@ from src.config import (
     TABLE_DIR,
 )
 
-# 每個維度至少要有這麼多配對才納入排行，避免小樣本雜訊上榜。
-# 「某品牌轉換率 100%」如果只有 3 筆，那不是洞察是雜訊。
+# 每個維度至少要有這麼多配對才納入分析，避免小樣本雜訊上榜。
 MIN_PAIRS = 500
+
+# 「加購後放棄率」的分母是加購數，所以排行榜要用加購數設門檻。
+# 用配對數設門檻是錯的 —— 某品牌可能有 700 個配對但只有 30 次加購，
+# 那個 96% 放棄率只是 30 分之 29，毫無統計意義。
+MIN_CARTS = 200
 
 
 def build_pairs(month: str) -> pd.DataFrame:
@@ -84,37 +88,55 @@ def add_dimensions(pairs: pd.DataFrame) -> pd.DataFrame:
 
 
 def funnel_metrics(g: pd.DataFrame) -> pd.Series:
-    """計算一組配對的漏斗指標。"""
+    """計算一組配對的漏斗指標。
+
+    【重要：漏斗必須是巢狀的】
+    第一版我把「有瀏覽」和「有加購」當成獨立旗標各自加總，結果算出
+    108% 的轉換率。原因是有一部分商品被直接加入購物車卻沒有瀏覽記錄
+    （用戶在更早的 session 看過，或追蹤漏掉）。
+
+    正確做法：每一階段的分母只能是「確實走到前一階段」的那群。
+    """
+    n_pairs = len(g)
     n_view = int(g["viewed"].sum())
     n_cart = int(g["carted"].sum())
-    n_purchase = int(g["purchased"].sum())
     n_remove = int(g["removed"].sum())
+    n_purchase = int(g["purchased"].sum())
 
-    # 加購後未購買 = 明確放棄。這是本專題最核心的指標。
+    # 巢狀計數
+    n_view_cart = int((g["viewed"] & g["carted"]).sum())
+    n_cart_buy = int((g["carted"] & g["purchased"]).sum())
     n_cart_no_buy = int((g["carted"] & ~g["purchased"]).sum())
 
+    # 沒有瀏覽記錄就直接加購 —— 這是資料品質指標，要一起報告
+    n_cart_no_view = int((g["carted"] & ~g["viewed"]).sum())
+
     return pd.Series({
-        "配對數": len(g),
-        "瀏覽": n_view,
-        "加購": n_cart,
-        "移除": n_remove,
-        "購買": n_purchase,
-        "瀏覽→加購%": n_cart / n_view * 100 if n_view else np.nan,
-        "加購→購買%": n_purchase / n_cart * 100 if n_cart else np.nan,
-        "整體轉換%": n_purchase / n_view * 100 if n_view else np.nan,
+        "配對數": n_pairs,
+        "有瀏覽": n_view,
+        "有加購": n_cart,
+        "有移除": n_remove,
+        "有購買": n_purchase,
+        "瀏覽→加購%": n_view_cart / n_view * 100 if n_view else np.nan,
+        "加購→購買%": n_cart_buy / n_cart * 100 if n_cart else np.nan,
         "加購後放棄%": n_cart_no_buy / n_cart * 100 if n_cart else np.nan,
         "放棄配對數": n_cart_no_buy,
+        "無瀏覽直接加購%": n_cart_no_view / n_cart * 100 if n_cart else np.nan,
     })
 
 
-def breakdown(pairs: pd.DataFrame, dim: str, min_pairs: int = MIN_PAIRS) -> pd.DataFrame:
-    """依指定維度拆解漏斗，並濾掉樣本太少的組。"""
+def breakdown(pairs: pd.DataFrame, dim: str) -> pd.DataFrame:
+    """依指定維度拆解漏斗，並濾掉樣本太少的組。
+
+    兩道門檻缺一不可：配對數確保這個維度值本身夠常見，
+    加購數確保「加購後放棄率」這個比率的分母夠大。
+    """
     out = (
         pairs.groupby(dim, observed=True)
         .apply(funnel_metrics, include_groups=False)
         .reset_index()
     )
-    out = out[out["配對數"] >= min_pairs]
+    out = out[(out["配對數"] >= MIN_PAIRS) & (out["有加購"] >= MIN_CARTS)]
     return out.sort_values("加購後放棄%", ascending=False)
 
 
@@ -123,7 +145,7 @@ def plot_funnel(overall: pd.Series) -> None:
     fig = go.Figure(
         go.Funnel(
             y=["瀏覽商品", "加入購物車", "完成購買"],
-            x=[overall["瀏覽"], overall["加購"], overall["購買"]],
+            x=[overall["有瀏覽"], overall["有加購"], overall["有購買"]],
             textinfo="value+percent initial",
             marker={"color": ["#5B8FF9", "#5AD8A6", "#F6BD16"]},
         )
@@ -193,6 +215,14 @@ def main() -> None:
     plot_funnel(overall)
 
     # ---- 各維度拆解 ----
+    # 維度覆蓋率：brand 缺失約 40%、category_code 缺失高達 98%。
+    # 這一定要印出來並寫進報告 —— 拿覆蓋率 1.6% 的欄位下結論是嚴重的分析錯誤，
+    # 面試官只要問一句「這個品類分析涵蓋多少資料」就會穿幫。
+    print("\n  -- 維度覆蓋率 --")
+    for col in ("brand", "category_code"):
+        cov = pairs[col].notna().mean()
+        print(f"  {col:<16}{cov:>8.2%}")
+
     dims = {
         "price_band": "funnel_by_price_band",
         "brand": "funnel_by_brand",
@@ -213,7 +243,7 @@ def main() -> None:
     hotspots = (
         results["brand"]
         .nlargest(20, "放棄配對數")
-        [["brand", "配對數", "加購", "放棄配對數", "加購後放棄%", "整體轉換%"]]
+        [["brand", "配對數", "有加購", "放棄配對數", "加購後放棄%", "瀏覽→加購%"]]
     )
     save(hotspots, "abandonment_hotspots_top20")
 
