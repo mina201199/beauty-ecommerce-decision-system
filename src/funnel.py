@@ -16,14 +16,12 @@
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 
 from src.config import (
     EVENT_CART,
     EVENT_PURCHASE,
     EVENT_REMOVE,
     EVENT_VIEW,
-    FIGURE_DIR,
     INTERIM_DIR,
     MONTHS,
     TABLE_DIR,
@@ -148,49 +146,6 @@ def breakdown(pairs: pd.DataFrame, dim: str) -> pd.DataFrame:
     return out.sort_values("加購後放棄%", ascending=False)
 
 
-def plot_funnel(overall: pd.Series) -> None:
-    """畫整體漏斗圖。"""
-    # 用巢狀計數，不是獨立計數 —— 否則圖上的百分比會與結論矛盾
-    fig = go.Figure(
-        go.Funnel(
-            y=["瀏覽商品", "瀏覽後加購", "加購後購買"],
-            x=[overall["有瀏覽"], overall["瀏覽且加購"], overall["瀏覽加購且購買"]],
-            textinfo="value+percent previous",
-            marker={"color": ["#5B8FF9", "#5AD8A6", "#F6BD16"]},
-        )
-    )
-    fig.update_layout(
-        title="轉換漏斗（以 session × 商品 配對計）",
-        font={"family": "Microsoft JhengHei", "size": 14},
-        height=500,
-    )
-    out = FIGURE_DIR / "funnel_overall.html"
-    fig.write_html(out, include_plotlyjs="cdn")
-    print(f"  已存圖 → {out.name}")
-
-
-def plot_abandonment_by_price(by_price: pd.DataFrame) -> None:
-    """加購後放棄率 × 價格帶 —— 最可能出現反直覺發現的圖。"""
-    fig = go.Figure(
-        go.Bar(
-            x=by_price["price_band"].astype(str),
-            y=by_price["加購後放棄%"],
-            text=by_price["加購後放棄%"].round(1),
-            textposition="outside",
-            marker_color="#E8684A",
-        )
-    )
-    fig.update_layout(
-        title="加入購物車後放棄率 × 價格帶",
-        yaxis_title="加購後放棄率 (%)",
-        font={"family": "Microsoft JhengHei", "size": 14},
-        height=500,
-    )
-    out = FIGURE_DIR / "abandonment_by_price.html"
-    fig.write_html(out, include_plotlyjs="cdn")
-    print(f"  已存圖 → {out.name}")
-
-
 def save(df: pd.DataFrame, name: str) -> None:
     path = TABLE_DIR / f"{name}.csv"
     df.to_csv(path, index=False, encoding="utf-8-sig")
@@ -221,7 +176,6 @@ def main() -> None:
 
     save(overall.to_frame("值").reset_index().rename(columns={"index": "指標"}),
          "funnel_overall")
-    plot_funnel(overall)
 
     # ---- 各維度拆解 ----
     # 維度覆蓋率：brand 缺失約 40%、category_code 缺失高達 98%。
@@ -246,7 +200,6 @@ def main() -> None:
         results[dim] = table
         save(table, name)
 
-    plot_abandonment_by_price(results["price_band"].sort_values("price_band"))
 
     # ---- 流失熱點 Top 20 ----
     hotspots = (
@@ -266,7 +219,8 @@ def main() -> None:
     print(f"{'=' * 52}")
     print(results["price_band"].sort_values("price_band").to_string(index=False))
 
-    print("\n[OK] 模組 1 完成。圖表在 outputs/figures/，表格在 outputs/tables/")
+    print("\n[OK] 模組 1 完成。表格在 outputs/tables/")
+    print("     產生圖表：python -m src.export_figures")
 
 
 if __name__ == "__main__":

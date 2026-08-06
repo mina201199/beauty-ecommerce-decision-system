@@ -12,11 +12,18 @@ from src.config import TABLE_DIR
 
 FONT = "Microsoft JhengHei, Noto Sans TC, sans-serif"
 
-BLUE = "#2E5EAA"
-RED = "#E8684A"
-GREEN = "#3FA46A"
-GREY = "#9AA0A6"
-AMBER = "#E0A62B"
+# 高飽和配色。題材是美妝電商，用紫→桃紅→金這組帶妝感的漸層，
+# 比預設的商務藍灰有記憶點，漏斗的層次感也做得出來。
+VIOLET = "#7C3AED"
+PINK = "#EC4899"
+GOLD = "#F59E0B"
+BLUE = "#3B82F6"
+RED = "#EF4444"
+GREEN = "#10B981"
+GREY = "#CBD5E1"
+AMBER = "#F59E0B"
+
+FUNNEL_COLORS = [VIOLET, PINK, GOLD]
 
 PRICE_ORDER = ["最低價 20%", "偏低", "中價位", "偏高", "最高價 20%"]
 
@@ -101,19 +108,43 @@ def funnel_chart() -> go.Figure:
     ]
 
     fig = go.Figure(go.Funnel(
-        y=["瀏覽商品", "瀏覽後加購", "加購後購買"], x=vals,
-        textinfo="value+percent previous",
-        texttemplate="%{value:,.0f}<br>%{percentPrevious:.1%}",
-        marker={"color": [BLUE, AMBER, GREEN]},
-        connector={"line": {"color": "#DADCE0"}},
+        y=["<b>瀏覽商品</b>", "<b>瀏覽後加購</b>", "<b>加購後購買</b>"],
+        x=vals,
+        textinfo="text",
+        text=[f"<b>{v:,.0f}</b>" for v in vals],
+        textfont={"size": 17, "color": "white", "family": FONT},
+        textposition="inside",
+        marker={
+            "color": FUNNEL_COLORS,
+            "line": {"color": "white", "width": 3},
+        },
+        connector={"line": {"color": "#E2E8F0", "width": 2}},
+        hovertemplate="%{y}<br>配對數 %{x:,.0f}<extra></extra>",
     ))
+
+    # 每一段流失多少 —— 漏斗真正要講的是「掉了多少」，不是「剩下多少」。
+    # 只畫剩下的量，圖就會很呆板；把流失標出來，落差才有戲劇性。
+    for i in (1, 2):
+        lost = vals[i - 1] - vals[i]
+        kept = vals[i] / vals[i - 1]
+        fig.add_annotation(
+            x=vals[0] * 0.62, y=i - 0.5, xref="x", yref="y",
+            text=(f"<b style='color:#EF4444;font-size:15px'>▼ {lost:,.0f}</b>"
+                  f"<br><span style='color:#94A3B8;font-size:12px'>"
+                  f"僅 {kept:.1%} 進入下一階段</span>"),
+            showarrow=False, align="left",
+            bgcolor="rgba(255,255,255,0.92)", borderpad=8,
+            bordercolor="#F1F5F9", borderwidth=1,
+        )
+
     rate = float(df["加購→購買%"])
     nested_rate = vals[2] / vals[1] * 100
+    fig.update_yaxes(showgrid=False)
     return _base(
         fig, "轉換漏斗：完整觀察到的路徑",
-        f"此漏斗只計算三階段都有記錄的配對。"
-        f"先瀏覽再加購者的購買率 {nested_rate:.2f}%，"
-        f"高於全部加購的 {rate:.2f}% —— 有瀏覽行為的加購意圖較強",
+        f"僅計算三階段都有記錄的配對。先瀏覽再加購者的購買率 "
+        f"{nested_rate:.2f}%，高於全部加購的 {rate:.2f}% —— 有瀏覽行為的加購意圖較強",
+        height=520,
     )
 
 

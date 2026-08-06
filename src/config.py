@@ -32,10 +32,22 @@ for _d in (RAW_DIR, INTERIM_DIR, FIGURE_DIR, TABLE_DIR, MODEL_DIR):
 
 
 # ---------------------------------------------------------------- 資料來源
+# 主資料集：真實行為流，用於模組 1/2/5 的診斷與預測
 KAGGLE_DATASET = "mkechinov/ecommerce-events-history-in-cosmetics-shop"
 
 # 資料涵蓋 2019/10 - 2020/02，共 5 個月
 MONTHS = ["2019-Oct", "2019-Nov", "2019-Dec", "2020-Jan", "2020-Feb"]
+
+# 第二資料集：商品屬性與含膚質標記的評論，用於模組 4 的探索引擎。
+#
+# 【必須誠實說明的邊界】
+# 這是另一家店（Sephora，2023 年爬取）的資料，與上面的 REES46 行為資料
+# （2019-2020）分屬不同來源，兩者不可直接串接。
+# 正確的敘事是：用行為資料診斷出問題在商品探索環節，再用這份含商品屬性
+# 的資料建立解決方案原型 —— 而不是假裝它們是同一批資料。
+SEPHORA_DATASET = "nadyinky/sephora-products-and-skincare-reviews"
+SEPHORA_DIR = RAW_DIR / "sephora"
+SEPHORA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ---------------------------------------------------------------- 資料型別
