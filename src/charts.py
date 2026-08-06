@@ -237,6 +237,55 @@ def breakeven_chart() -> go.Figure:
     )
 
 
+def overlap_heatmap() -> go.Figure:
+    """模組 4 的核心指標：同膚質排序與全站排序差多少。
+
+    用熱力圖是因為要看的是「哪些組合差最多」—— 二維的維度組合
+    用長條圖會變成 28 根柱子，找不到重點。
+    """
+    df = load("ranking_overlap")
+    piv = df.pivot_table(index="需求", columns="膚質", values="重疊率%")
+
+    fig = go.Figure(go.Heatmap(
+        z=piv.values, x=piv.columns, y=piv.index,
+        colorscale=[[0, "#7C3AED"], [0.5, "#EC4899"], [1, "#FDE68A"]],
+        zmin=0, zmax=100,
+        text=[[f"{v:.0f}%" for v in row] for row in piv.values],
+        texttemplate="%{text}",
+        textfont={"size": 15, "color": "white"},
+        colorbar={"title": "重疊率"},
+        hovertemplate="%{y} × %{x}<br>重疊率 %{z:.0f}%<extra></extra>",
+    ))
+    mean_swap = df["被換掉的商品"].mean()
+    return _base(
+        fig, "全站排序推給你的，跟適合你膚質的差多少",
+        f"顏色越深代表差異越大。平均而言 Top 10 有 {mean_swap:.1f} 項"
+        f"不是該膚質評價最好的商品",
+        height=520,
+    )
+
+
+def cohort_spread_chart() -> go.Figure:
+    """誠實呈現：絕對差距不大，但足以翻轉排序。"""
+    df = load("skin_cohort_spread")
+    row = df[df["指標"].str.contains("推薦率")].iloc[0]
+
+    stages = ["中位數", "P75", "P90", "最大"]
+    vals = [float(row[s]) for s in stages]
+
+    fig = go.Figure(go.Bar(
+        x=stages, y=vals,
+        marker_color=[GREY, PINK, VIOLET, RED],
+        text=[f"{v:.1f}" for v in vals], textposition="outside",
+    ))
+    fig.update_yaxes(title="推薦率最大差距（百分點）")
+    return _base(
+        fig, "同一支產品在不同膚質之間的推薦率差距",
+        "中位數僅 6.2 個百分點 —— 差距不大，但因頂端商品評價高度同質，"
+        "已足以決定誰排在前面",
+    )
+
+
 def window_tradeoff_chart() -> go.Figure:
     df = load("observation_window_tradeoff")
 

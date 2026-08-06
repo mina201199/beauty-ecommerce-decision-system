@@ -13,13 +13,14 @@ import json
 import pandas as pd
 import streamlit as st
 
-from src import charts
+from src import charts, discovery
 from src.config import (
     ASSUMED_GROSS_MARGIN,
     MODEL_DIR,
     OBSERVATION_WINDOW_MINUTES,
     TABLE_DIR,
 )
+from src.sephora_prep import NEED_KEYWORDS
 
 st.set_page_config(
     page_title="電商轉換漏斗診斷系統",
@@ -37,6 +38,12 @@ def load_table(name: str) -> pd.DataFrame:
 def load_metrics() -> dict:
     path = MODEL_DIR / "metrics.json"
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+@st.cache_data
+def load_skincare():
+    """模組 4 的商品與同膚質評分表。快取避免每次互動都重讀 parquet。"""
+    return discovery.load_data()
 
 
 econ = load_table("baseline_economics").iloc[0]
@@ -84,8 +91,9 @@ if metrics:
 
 st.divider()
 
-tab1, tab2, tab3, tab4 = st.tabs(
-    ["① 漏斗診斷", "② 購買意圖預測", "③ 商業決策試算", "④ 資料限制"]
+tab1, tab2, tab3, tab5, tab4 = st.tabs(
+    ["① 漏斗診斷", "② 購買意圖預測", "③ 商業決策試算",
+     "④ 膚況導向商品探索", "⑤ 資料限制"]
 )
 
 # ---------------------------------------------------------------- 漏斗
@@ -207,6 +215,106 @@ with tab3:
         真正要解決需要 uplift 模型，而 uplift 模型需要實驗組／對照組資料。
         本資料集為觀察性資料，不具備此條件 —— 這是本專案無法克服的限制。
         """
+    )
+
+# ---------------------------------------------------------------- 探索引擎
+with tab5:
+    st.markdown("### 不靠折扣的解方：讓人更快找到對的商品")
+    st.caption(
+        "模組 1 指出槓桿在「瀏覽→加購」這一步，模組 3 證明折扣挽回不划算。"
+        "商品探索優化正好作用在該環節，而且沒有毛利成本 —— "
+        "折扣要 2.34% 挽回率才打平，探索優化的損益兩平門檻趨近於零。"
+    )
+    st.warning(
+        "**資料邊界**：本頁使用 Sephora 商品與評論資料（2023 年爬取，"
+        "2,420 項 Skincare 商品、109 萬則評論），與前面的 REES46 行為資料"
+        "（2019–2020）分屬不同來源，**不可串接**。這裡建立的是解決方案原型，"
+        "不是對同一批用戶的分析。"
+    )
+
+    products, cohorts = load_skincare()
+
+    f1, f2, f3, f4 = st.columns([1, 1.2, 1, 1])
+    skin = f1.selectbox(
+        "你的膚質", discovery.SKIN_TYPES,
+        format_func=lambda s: discovery.SKIN_TYPE_ZH[s],
+    )
+    need = f2.selectbox("主要需求", ["（不限）"] + list(NEED_KEYWORDS))
+    budget = f3.slider("預算上限 (USD)", 10, 200, 60, 5)
+    avoid = f4.checkbox("避開刺激成分", value=False,
+                        help="排除含變性酒精或香料的商品")
+
+    need_arg = None if need == "（不限）" else need
+
+    personal = discovery.rank_for(
+        products, cohorts, skin, need=need_arg,
+        budget=budget, avoid_irritants=avoid, top_n=10,
+    )
+    generic = discovery.rank_global(
+        products, cohorts, need=need_arg,
+        budget=budget, avoid_irritants=avoid, top_n=10,
+    )
+
+    if personal.empty:
+        st.info("此條件下沒有商品，試著放寬預算或需求。")
+    else:
+        shared = len(set(personal["product_id"]) & set(generic["product_id"]))
+        o1, o2, o3 = st.columns(3)
+        o1.metric("與全站排序重疊", f"{shared} / 10")
+        o2.metric("被換掉的商品", f"{10 - shared} 項",
+                  "全站排序看不到這些", delta_color="off")
+        o3.metric("符合條件的商品數", f"{len(products):,} 中篩選")
+
+        show = personal[[
+            "product_name", "brand_name", "price_final",
+            "rec_score", "rating_score", "rating_delta",
+            "n_cohort", "irritant_score",
+        ]].copy()
+        # ProgressColumn 的 format 是 printf 風格，不會自動把 0-1 轉成百分比。
+        # 直接餵 0.9 會顯示成「0.9%」，所以先自己乘 100。
+        show["rec_score"] = show["rec_score"] * 100
+        show = show.rename(columns={
+            "product_name": "商品", "brand_name": "品牌",
+            "price_final": "價格", "rec_score": "同膚質推薦率",
+            "rating_score": "同膚質評分", "rating_delta": "vs 該品平均",
+            "n_cohort": "同膚質評論數", "irritant_score": "刺激分數",
+        })
+        st.dataframe(
+            show, width="stretch", hide_index=True,
+            column_config={
+                "同膚質推薦率": st.column_config.ProgressColumn(
+                    format="%.1f%%", min_value=0.0, max_value=100.0),
+                "價格": st.column_config.NumberColumn(format="$%.0f"),
+                "同膚質評分": st.column_config.NumberColumn(format="%.2f"),
+                "vs 該品平均": st.column_config.NumberColumn(
+                    format="%+.2f", help="正值代表這支產品對你的膚質優於它自己的平均"),
+            },
+        )
+        st.caption(
+            "「vs 該品平均」是本頁最重要的欄位：它問的是「這支產品對你的膚質，"
+            "比它自己的整體表現好多少」，而不是「它是不是熱門商品」。"
+        )
+
+        with st.expander("對照：不分膚質的全站排序會推薦什麼"):
+            swapped = set(generic["product_id"]) - set(personal["product_id"])
+            g = generic[["product_name", "brand_name", "price_final",
+                         "rating_all_s", "rec_all_s"]].copy()
+            g["個人化後被剔除"] = generic["product_id"].isin(swapped).map(
+                {True: "是", False: ""})
+            st.dataframe(g.rename(columns={
+                "product_name": "商品", "brand_name": "品牌",
+                "price_final": "價格", "rating_all_s": "全站評分",
+                "rec_all_s": "全站推薦率",
+            }), width="stretch", hide_index=True)
+
+    st.divider()
+    st.plotly_chart(charts.overlap_heatmap(), width="stretch")
+    st.plotly_chart(charts.cohort_spread_chart(), width="stretch")
+    st.info(
+        "**必須誠實說明的一點**：膚質之間的評分差距中位數只有 0.19 星，"
+        "絕對值並不大。排序之所以被大幅打亂，是因為頂端商品的評價高度同質"
+        "（全站平均 4.30，82% 的評論給 4–5 星），全站排序本身幾乎沒有鑑別度。"
+        "膚質訊號雖小，卻足以決定誰排在前面 —— 而使用者只看得到前面幾個。"
     )
 
 # ---------------------------------------------------------------- 限制
