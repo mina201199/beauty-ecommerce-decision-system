@@ -237,6 +237,79 @@ def breakeven_chart() -> go.Figure:
     )
 
 
+def cart_curve_chart() -> go.Figure:
+    """整份分析最重要的一張圖：跳躍只發生在 0→1。
+
+    這張圖把「該做什麼」講死了 —— 目標不是讓人多買，
+    是讓那 57.6% 一件都沒加的人加到第一件。
+    """
+    df = load("cart_curve")
+    colors = [RED] + [GREEN] * (len(df) - 1)
+
+    fig = go.Figure(go.Bar(
+        x=df["加購件數"], y=df["購買率%"],
+        marker_color=colors,
+        text=[f"<b>{v:.2f}%</b>" for v in df["購買率%"]],
+        textposition="outside",
+        customdata=df[["session 數", "佔比%"]],
+        hovertemplate="加購 %{x} 件<br>購買率 %{y:.2f}%"
+                      "<br>session %{customdata[0]:,.0f}"
+                      "（佔 %{customdata[1]:.1f}%）<extra></extra>",
+    ))
+
+    y0 = float(df.iloc[0]["購買率%"])
+    y1 = float(df.iloc[1]["購買率%"])
+    fig.add_annotation(
+        x=0.5, y=(y0 + y1) / 2,
+        text=f"<b style='color:#7C3AED;font-size:15px'>▲ +{y1 - y0:.1f} 個百分點</b>"
+             f"<br><span style='color:#64748B;font-size:12px'>購買率變 {y1 / y0:.2f} 倍</span>",
+        showarrow=False, bgcolor="rgba(255,255,255,0.95)", borderpad=8,
+        bordercolor="#E2E8F0", borderwidth=1,
+    )
+    fig.add_annotation(
+        x=4, y=y1 + 4,
+        text="<span style='color:#64748B;font-size:12px'>"
+             "加第 2、3 件幾乎沒有額外效果</span>",
+        showarrow=False,
+    )
+
+    share0 = float(df.iloc[0]["佔比%"])
+    fig.update_xaxes(title="觀察窗（3 分鐘）內的加購件數")
+    fig.update_yaxes(title="之後的購買率 (%)", range=[0, 30])
+    return _base(
+        fig, "關鍵是「有沒有加購」，不是「加幾件」",
+        f"{share0:.1f}% 的合格 session 一件都沒加 —— 這就是可以著力的池子",
+        height=500,
+    )
+
+
+def solution_comparison() -> go.Figure:
+    """兩個方案的年化淨效益直接對比，只看合理情境。"""
+    disc = load("impact_sensitivity")
+    opp = load("opportunity_scenarios")
+
+    d = disc[disc["合理性"] == "合理"]
+    o = opp[opp["合理性"] == "合理"].head(4)
+
+    labels = [f"折扣 10%<br>挽回 {r:.0%}" for r in d["挽回率假設"]] + \
+             [f"探索優化<br>轉化 {r:.0%}" for r in o["轉化比例"]]
+    values = list(d["淨效益(年化)"]) + list(o["首年淨效益"])
+    colors = [RED] * len(d) + [GREEN] * len(o)
+
+    fig = go.Figure(go.Bar(
+        x=labels, y=values, marker_color=colors,
+        text=[f"{v:,.0f}" for v in values], textposition="outside",
+    ))
+    fig.add_hline(y=0, line={"color": "#3C4043", "width": 2})
+    fig.update_yaxes(title="年化淨效益")
+    return _base(
+        fig, "兩個方案的年化淨效益對比（僅列合理情境）",
+        "折扣方案在合理區間全數虧損；探索優化的開發成本只付一次，"
+        "之後每年都是淨賺",
+        height=500,
+    )
+
+
 def overlap_heatmap() -> go.Figure:
     """模組 4 的核心指標：同膚質排序與全站排序差多少。
 

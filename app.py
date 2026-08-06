@@ -60,21 +60,50 @@ st.caption(
 
 st.markdown(
     """
-    <div style="background:#FFF4F2;border-left:5px solid #E8684A;
-                padding:18px 22px;border-radius:6px;margin:8px 0 26px">
-      <div style="font-size:19px;font-weight:700;color:#3C4043">
-        最大的漏水點在購物車，但問題不是價格
+    <div style="background:linear-gradient(90deg,#F5F3FF,#FDF2F8);
+                border-left:5px solid #7C3AED;
+                padding:20px 24px;border-radius:8px;margin:8px 0 20px">
+      <div style="font-size:13px;font-weight:700;color:#7C3AED;
+                  letter-spacing:1px;margin-bottom:6px">結論與建議</div>
+      <div style="font-size:20px;font-weight:700;color:#1E293B;line-height:1.5">
+        別再加碼折扣。把資源投在「讓人加到第一件商品」，
+        預估首年淨效益 +123,448。
       </div>
-      <div style="font-size:15px;color:#5F6368;margin-top:8px;line-height:1.7">
-        87.0% 的加購最終沒有成交。但放棄率在五個價格帶之間僅相差 2.5 個百分點 ——
-        <b>價格決定的是「要不要加入購物車」，不是「加了之後會不會結帳」</b>。
-        因此把折扣預算投在購物車挽回的效益有限：試算顯示 10% 折扣方案在合理假設下
-        仍為虧損，建議改為 5%。
+      <div style="font-size:15px;color:#475569;margin-top:10px;line-height:1.8">
+        87% 的加購沒有成交，但放棄行為與價格無關，因此折扣挽回在合理假設下
+        <b>全數虧損（年化 −382,511 ～ −96,849）</b>。<br>
+        真正的斷點在更前面：<b>57.6% 的 session 連一件都沒加</b>，
+        而加到第一件會讓購買率從 7.34% 跳到 20.23%。
       </div>
     </div>
     """,
     unsafe_allow_html=True,
 )
+
+# 決策鏈：讓人三秒看懂整個論證
+chain = [
+    ("問題", "加購後放棄 87%", "419 萬組未成交", "#EF4444"),
+    ("排除", "折扣不是解方", "合理情境全數虧損", "#F59E0B"),
+    ("解方", "推動第一件加購", "購買率 7.3% → 20.2%", "#7C3AED"),
+    ("效益", "首年 +123,448", "打平只需 0.98% 轉化", "#10B981"),
+]
+cols = st.columns(len(chain))
+for col, (tag, head, sub, color) in zip(cols, chain):
+    col.markdown(
+        f"""
+        <div style="border-top:4px solid {color};background:#F8FAFC;
+                    padding:14px 16px;border-radius:0 0 8px 8px;height:120px">
+          <div style="font-size:12px;font-weight:700;color:{color};
+                      letter-spacing:2px">{tag}</div>
+          <div style="font-size:16px;font-weight:700;color:#1E293B;
+                      margin-top:6px;line-height:1.4">{head}</div>
+          <div style="font-size:12px;color:#64748B;margin-top:6px">{sub}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+st.write("")
 
 # ---------------------------------------------------------------- KPI
 c1, c2, c3, c4 = st.columns(4)
@@ -91,19 +120,20 @@ if metrics:
 
 st.divider()
 
-tab1, tab2, tab3, tab5, tab4 = st.tabs(
-    ["① 漏斗診斷", "② 購買意圖預測", "③ 商業決策試算",
-     "④ 膚況導向商品探索", "⑤ 資料限制"]
+tab1, tab3, tab5, tab2, tab4 = st.tabs(
+    ["① 問題在哪", "② 折扣行不行", "③ 那該做什麼",
+     "④ 模型細節", "⑤ 怎麼驗證與限制"]
 )
 
 # ---------------------------------------------------------------- 漏斗
 with tab1:
     st.plotly_chart(charts.price_contrast(), width='stretch')
     st.info(
-        "**這是本專案最重要的一張圖。** 一般直覺認為「東西貴所以放棄」，"
+        "**這張圖排除了最直覺的假設。** 一般認為「東西貴所以放棄」，"
         "但資料顯示放棄率在各價格帶幾乎持平（85.6%–88.1%），"
         "而瀏覽→加購率卻從 19.7% 腰斬到 9.5%。"
-        "兩個階段對價格的敏感度完全不同，因此介入點應該在商品頁而非購物車。"
+        "兩個階段對價格的敏感度完全不同 —— 這是後面判定「折扣不是解方」的第一個依據，"
+        "也把注意力導向更前面的加購環節（見第 ③ 頁）。"
     )
     st.plotly_chart(charts.funnel_chart(), width='stretch')
 
@@ -118,6 +148,7 @@ with tab1:
 
 # ---------------------------------------------------------------- 模型
 with tab2:
+    st.markdown("## 模型細節")
     st.markdown(
         f"**預測問題**：一個 session 已經瀏覽了 "
         f"{OBSERVATION_WINDOW_MINUTES} 分鐘、目前還沒下單，他最終會不會買？"
@@ -150,7 +181,7 @@ with tab2:
 
 # ---------------------------------------------------------------- 商業
 with tab3:
-    st.markdown("### 折扣方案試算")
+    st.markdown("## 折扣行不行：答案是不行")
     st.caption(
         "模型鎖定比例與涵蓋率取自模組 2 的實際 lift curve，非假設值。"
         "挽回率無法從歷史資料推得，只能靠 A/B test 實測 —— "
@@ -219,11 +250,56 @@ with tab3:
 
 # ---------------------------------------------------------------- 探索引擎
 with tab5:
-    st.markdown("### 不靠折扣的解方：讓人更快找到對的商品")
+    st.markdown("## 該做什麼：讓人加到第一件商品")
+
+    st.plotly_chart(charts.cart_curve_chart(), width="stretch")
+    st.success(
+        "**這張圖決定了整個方案的方向。** 購買率的跳躍完全發生在 0 → 1 件"
+        "（7.34% → 20.23%，2.76 倍），加第 2、3 件幾乎沒有額外效果。"
+        "所以目標不是「讓人多買」，而是**讓那 57.6% 一件都沒加的人加到第一件**。"
+    )
+
+    st.markdown("### 這能改善多少")
+    opp = load_table("opportunity_scenarios")
+
+    q1, q2, q3 = st.columns(3)
+    row5 = opp[opp["轉化比例"] == 0.05].iloc[0]
+    q1.metric("打平所需轉化率", "0.98%", "把零加購推到加購一件")
+    q2.metric("5% 轉化的首年淨效益", f"+{row5['首年淨效益']:,.0f}",
+              f"訂單成長 {row5['訂單成長%']:.1f}%")
+    q3.metric("對照：10% 折扣方案", "−96,849 ～ −382,511",
+              "合理情境全數虧損", delta_color="inverse")
+
+    show_opp = opp[["轉化比例", "年化增額訂單", "訂單成長%",
+                    "年化增額毛利", "首年淨效益", "合理性"]].copy()
+    show_opp["轉化比例"] = (show_opp["轉化比例"] * 100).map("{:.0f}%".format)
+    st.dataframe(
+        show_opp, width="stretch", hide_index=True,
+        column_config={
+            "年化增額訂單": st.column_config.NumberColumn(format="%.0f"),
+            "訂單成長%": st.column_config.NumberColumn(format="%.1f%%"),
+            "年化增額毛利": st.column_config.NumberColumn(format="%.0f"),
+            "首年淨效益": st.column_config.NumberColumn(format="%.0f"),
+        },
+    )
     st.caption(
-        "模組 1 指出槓桿在「瀏覽→加購」這一步，模組 3 證明折扣挽回不划算。"
-        "商品探索優化正好作用在該環節，而且沒有毛利成本 —— "
-        "折扣要 2.34% 挽回率才打平，探索優化的損益兩平門檻趨近於零。"
+        "首年淨效益已扣除假設的一次性開發成本 30,000（約 3 個工程師月）。"
+        "第二年起沒有這筆成本，效益等於年化增額毛利。"
+    )
+
+    st.plotly_chart(charts.solution_comparison(), width="stretch")
+
+    st.error(
+        "**這是效果上限，不是預測值。** 加購 1 件的 session 購買率較高，"
+        "部分原因是那群人本來就更想買 —— 把人推去加購不會自動獲得同樣的購買率。"
+        "真實效果必須靠 A/B test 測得，設計見第 ⑤ 頁。"
+    )
+
+    st.divider()
+    st.markdown("### 怎麼推動第一件加購：膚況導向的商品探索")
+    st.caption(
+        "既然關鍵是「找到一件想買的」，那商品排序就是最直接的槓桿。"
+        "以下用另一份含膚質評論的資料，建立解決方案原型。"
     )
     st.warning(
         "**資料邊界**：本頁使用 Sephora 商品與評論資料（2023 年爬取，"

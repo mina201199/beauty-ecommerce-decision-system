@@ -21,6 +21,8 @@ FIGURES = {
     "impact_sensitivity": charts.sensitivity_chart,
     "impact_breakeven": charts.breakeven_chart,
     "observation_window": charts.window_tradeoff_chart,
+    "cart_curve": charts.cart_curve_chart,
+    "solution_comparison": charts.solution_comparison,
     "discovery_overlap": charts.overlap_heatmap,
     "discovery_cohort_spread": charts.cohort_spread_chart,
 }
