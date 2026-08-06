@@ -11,6 +11,7 @@
 import os
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 from src.config import KAGGLE_DATASET, MONTHS, RAW_DIR
@@ -56,6 +57,27 @@ def check_credentials() -> None:
 def already_downloaded() -> bool:
     """5 個月的 CSV 都在就不重複下載 —— 這包有 450MB，別浪費頻寬。"""
     return all((RAW_DIR / f"{m}.csv").exists() for m in MONTHS)
+
+
+def unzip_manual_download() -> bool:
+    """處理手動下載的 zip。
+
+    不想設定 API 金鑰的話，可以直接在 Kaggle 網站按 Download，
+    把下載到的 zip 丟進 data/raw/，這支程式會自動解開。
+    """
+    zips = list(RAW_DIR.glob("*.zip"))
+    if not zips:
+        return False
+
+    for zip_path in zips:
+        size_mb = zip_path.stat().st_size / 1024 ** 2
+        print(f"[*] 發現手動下載的壓縮檔：{zip_path.name} ({size_mb:.0f} MB)")
+        print("[*] 解壓縮中...")
+        with zipfile.ZipFile(zip_path) as zf:
+            zf.extractall(RAW_DIR)
+        print(f"[OK] 已解開 {zip_path.name}")
+
+    return already_downloaded()
 
 
 def download() -> None:
@@ -106,6 +128,12 @@ def main() -> None:
     if already_downloaded():
         print("[*] 5 個月的資料都已存在，略過下載。")
         report()
+        return
+
+    # 先看有沒有手動下載的 zip，有的話就不需要 API 金鑰
+    if unzip_manual_download():
+        report()
+        print("\n[OK] 下一步：python -m src.prepare")
         return
 
     check_credentials()
