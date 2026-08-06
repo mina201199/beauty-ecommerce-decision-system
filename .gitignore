@@ -1,0 +1,33 @@
+# 機密 —— 桌面上那個明文 apikey.txt 千萬不要跟著進版控
+.env
+.env.*
+!.env.example
+*.key
+apikey.txt
+kaggle.json
+
+# 資料
+data/
+outputs/
+*.csv.gz
+*.parquet
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+
+# 教學截圖，不屬於專案
+screencapture-*.pdf
+
+# Claude Code 本機個人設定
+.claude/settings.local.json
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
