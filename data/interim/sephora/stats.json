@@ -1,0 +1,7 @@
+{
+  "global_mean_rating":4.2991581773,
+  "global_rec_rate":0.8399618749,
+  "n_reviews":1094411.0,
+  "n_reviews_with_skin":982854.0,
+  "n_cohort_rows":8880.0
+}
