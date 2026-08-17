@@ -33,6 +33,13 @@ FEATURE_DIR.mkdir(parents=True, exist_ok=True)
 
 WINDOW_SEC = OBSERVATION_WINDOW_MINUTES * 60
 
+HISTORY_PATH = INTERIM_DIR / "user_history.parquet"
+HISTORY_COLS = [
+    "prior_sessions", "prior_purchases", "prior_carts", "prior_events",
+    "prior_spend", "days_since_last", "is_returning",
+    "has_bought_before", "prior_purchase_rate", "prior_avg_spend",
+]
+
 
 def build_month(month: str) -> pd.DataFrame:
     df = pd.read_parquet(
@@ -124,7 +131,24 @@ def build_month(month: str) -> pd.DataFrame:
     feat = feat.drop(columns=["start"])
 
     feat["month"] = month
-    return feat.reset_index()
+    feat = feat.reset_index()
+
+    # ---- 使用者跨 session 歷史 ----
+    # 這些特徵只用本次 session 開始前已結束的 session，計算與防洩漏
+    # 見 src/user_history.py。沒有歷史檔就跳過，讓模組仍可獨立執行。
+    if HISTORY_PATH.exists():
+        hist = pd.read_parquet(HISTORY_PATH).drop(columns=["month"])
+        before = len(feat)
+        feat = feat.merge(hist, on="user_session", how="left")
+        assert len(feat) == before, "併入歷史特徵後列數改變，user_session 可能有重複"
+        # 併不到的極少數（跨月邊界）以「無歷史」處理
+        feat[HISTORY_COLS] = feat[HISTORY_COLS].fillna(
+            {c: -1.0 if c in ("days_since_last", "prior_purchase_rate",
+                              "prior_avg_spend") else 0
+             for c in HISTORY_COLS}
+        )
+
+    return feat
 
 
 def main() -> None:

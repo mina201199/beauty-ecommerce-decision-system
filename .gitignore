@@ -7,10 +7,20 @@ apikey.txt
 kaggle.json
 
 # 資料
-data/
-outputs/
+#
+# 注意：git 無法「先忽略整個目錄、再把裡面的檔案加回來」——
+# 父目錄被排除後，子檔案的 ! 例外一律無效。
+# 所以這裡逐項列出要忽略的路徑，而不是整個 data/ 與 outputs/。
+#
+# 保留進版控的是「分析產物」（合計約 3MB），不是原始資料：
+# 有了它們，別人不必下載 2.3GB 原始檔就能跑起儀表板。
+data/raw/
+data/interim/*.parquet
+data/interim/features/
+data/interim/*.csv
+outputs/figures/
+outputs/*.txt
 *.csv.gz
-*.parquet
 
 # Python
 __pycache__/
