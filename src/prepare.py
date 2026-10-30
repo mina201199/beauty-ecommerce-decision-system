@@ -89,7 +89,6 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     """最小必要清洗。
 
     刻意「少做」—— 每刪一列都要說得出理由。
-    面試官問「你為什麼刪掉這些資料」時，答不出來就是扣分。
     """
     before = len(df)
 
