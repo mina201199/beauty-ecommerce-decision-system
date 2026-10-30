@@ -86,9 +86,21 @@ sephora_prep.py ┴──▶  discovery.py   模組 4 探索引擎    ┘
 ├── docs/
 │   ├── 分析報告.md          # 完整方法與發現
 │   └── 專題規格書.md        # 規格、實作順序、防雷清單、計畫變更紀錄
-├── data/                   # 原始與中繼資料（不進版控）
-└── outputs/                # 圖表、表格、模型（不進版控）
+├── data/                   # 原始與中繼資料；只有 data/interim/sephora/ 的 3 個檔案進版控
+└── outputs/                # 表格與模型進版控；圖表（outputs/figures/）不進版控
 ```
+
+**進版控的產出**（以 `git ls-files data outputs` 為準，共 24 個檔案、約 4.1 MB）：
+
+| 路徑 | 內容 |
+|---|---|
+| `outputs/tables/*.csv`（19 個） | 各模組輸出的分析表，儀表板與 `charts.py` 讀取其中 13 個 |
+| `outputs/models/metrics.json` | 模型評估指標與前 20% 涵蓋率，儀表板與 `impact.py` 讀取 |
+| `outputs/models/intent_lgbm.txt` | 訓練好的 LightGBM 模型（儀表板不讀取） |
+| `data/interim/sephora/products.parquet`、`cohorts.parquet` | Sephora 商品表與同膚質評分表，模組 4 探索引擎讀取 |
+| `data/interim/sephora/stats.json` | 與上兩個檔案同一步驟產出的評論數等統計 |
+
+這些產出進版控，是為了讓 clone 下來的 repo 不必下載約 2.3GB 原始資料、也不必重跑管線，就能直接 `streamlit run app.py`。REES46 的原始與中繼資料（`data/raw/`、`data/interim/*.parquet`、`data/interim/features/`）與 `outputs/figures/` 不進版控，規則見 `.gitignore`。
 
 ---
 
@@ -106,8 +118,8 @@ sephora_prep.py ┴──▶  discovery.py   模組 4 探索引擎    ┘
 **4. 圖表單一定義來源**
 11 張圖只在 `charts.py` 定義一次，儀表板與獨立 HTML 共用。先前繪圖邏輯散落兩處，曾導致同一份報告出現互相矛盾的轉換率（58% vs 14.98%）。
 
-**5. 報表文字動態生成**
-說明文字中的數字由結果計算而來，不寫死。硬編碼的數字會在重跑後過期，而報表上一個過期的數字足以讓整份分析失去可信度。
+**5. 報表數字：計算值與寫死字串並存**
+頂部 KPI 卡、模型指標、折扣試算滑桿與機會情境表的數字，在執行時從 `outputs/` 的表格與 `metrics.json` 計算。但結論摘要、決策鏈卡片與多段圖表說明裡的數字仍是寫死的字串，重跑管線後需要人工同步。其中資料總量「2,069 萬筆」是資料處理階段的固定值：進版控的產出檔沒有記錄這個總數，儀表板執行時也讀不到原始資料。
 
 **6. 六個自我修正的錯誤，全部保留在 commit 紀錄**
 
