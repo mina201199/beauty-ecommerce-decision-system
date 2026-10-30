@@ -1,175 +1,150 @@
 # 美妝電商決策系統
 
-> 以 2,069 萬筆真實用戶行為與 109 萬則商品評論，找出轉換流程的漏水點、
-> 排除無效的介入方案、並量化可行解方的效益。
+> 用 2,069 萬筆真實電商行為與 109 萬則商品評論，從「轉換漏在哪」一路做到「該把錢花在哪、值多少」：漏斗診斷 → LightGBM 購買意圖預測 → 損益兩平試算 → 膚況導向商品探索，最後包成可互動的 Streamlit 儀表板。
 
-**結論**：87% 的加購最終沒有成交，但放棄行為與價格無關 —— 折扣挽回在合理假設下全數虧損（年化 −461,075 ～ −178,069）。真正的斷點在更前面：**57.6% 的 session 連一件都沒加**，而加到第一件會讓購買率從 7.34% 跳到 20.23%。把資源投在推動第一件加購，**預估首年淨效益 +123,448，打平只需 0.98% 轉化率**。
+📊 [完整分析報告](docs/分析報告.md)　|　📐 [專題規格書](docs/專題規格書.md)
 
+## 要解決的問題
 
-> **貨幣單位**：REES46 行為資料的 `price` 欄位**原始來源未標示幣別**，本專案一律以「一致的貨幣單位」表述，不臆測為特定幣別 —— 所有結論皆為相對比較（損益兩平門檻、方案間對照），不受幣別影響。Sephora 資料則明確為美元（`price_usd`）。
+一家美妝電商知道「轉換率不好」，但不知道**哪個環節在漏、漏掉多少錢、該優先修哪一個**。常見直覺是「對放棄購物車的人發折扣」，這個專案用資料檢驗這個直覺，並找出更划算的槓桿。
 
-📊 **[完整分析報告](docs/分析報告.md)**　|　📐 **[專題規格書](docs/專題規格書.md)**
-
----
-
-## 解決什麼問題
-
-一家美妝電商知道「轉換率不好」，但不知道**哪個環節在漏、漏掉多少錢、該優先修哪一個**。
-
-| 問題 | 結論 |
-|---|---|
-| 哪一段流失最嚴重？ | **購物車**。481 萬次加購中 419 萬次未成交（**87.0%**） |
-| 是價格造成的嗎？ | **不是**。五個價格帶的放棄率全距僅 **2.5 個百分點** |
-| 能即時預測購買意圖嗎？ | **能**。前 20% 高分 session 涵蓋 **48.8%** 的購買者（2.44 倍） |
-| 什麼行為最能預測購買？ | **購物車行為**佔 **70%** 預測力；瀏覽次數、活躍度幾乎無用 |
-| 發折扣挽回划算嗎？ | **不划算**。合理情境年化 **−461,075 ～ −178,069**，需 2.63% 挽回率才打平 |
-| 那該做什麼？ | **推動第一件加購**。0→1 件讓購買率跳 **2.76 倍**，加第 2、3 件幾乎無效 |
-| 值多少錢？ | 轉化 5% 的零加購 session → 首年淨效益 **+123,448**，打平門檻 **0.98%** |
-
-**論證鏈**：診斷問題 → 排除折扣 → 定位真正的斷點 → 量化解方效益 → 設計驗證方式。
-
----
-
-## 用了哪些技術，以及為什麼
-
-技術選擇的理由比技術本身重要。以下每一項都附上「為什麼不用另一種」。
-
-| 技術 | 用在哪 | 為什麼選它 |
+| 問題 | 結論 | 來源 |
 |---|---|---|
-| **pandas + PyArrow/Parquet** | 2,069 萬列事件處理 | 明確指定 `category`/`int32`/`float32` 並轉存欄式儲存，2.3GB CSV → 440MB parquet，讀取快一個量級。不用 Spark 是因為單機 32GB 足以處理，引入分散式只會增加複雜度 |
-| **LightGBM** | 購買意圖預測 | 表格資料上梯度提升樹仍優於神經網路，且訓練快、可解釋。不用深度學習是因為 33 個特徵的表格問題沒有讓它發揮的空間 |
-| **不使用 SMOTE / `scale_pos_weight`** | 類別不平衡 | 正樣本 13.5% 不屬於嚴重不平衡，加權會破壞機率校準 —— 而商業試算需要能反映真實機率的分數。**知道何時不該用某個技術，比會用它重要** |
-| **時間切分（非隨機切分）** | 訓練/驗證/測試 | 行為資料有時序性，隨機切分等於用未來預測過去。採 2019/10–12 訓練、2020/01 驗證、2020/02 測試 |
-| **PR-AUC（非 accuracy）** | 模型評估 | 正樣本 13%，全猜「不買」也有 87% accuracy，該指標毫無意義 |
-| **`gain` 重要度（非預設 `split`）** | 特徵解釋 | `split` 只數分裂次數，嚴重偏袒連續型高基數特徵。本專案中兩者結論完全相反：`n_cart` 的 `split` 接近墊底，`gain` 卻是第一名（34.9%） |
-| **兩層貝氏平滑** | 同膚質評分 | 商品評論數 P25 僅 37 則，拆成 4 種膚質後每組約剩 9 則，直接取平均會把雜訊當訊號 |
-| **TF-IDF + 餘弦相似度** | 成分相似替代品 | 成分表是稀疏的長尾文本，TF-IDF 足夠且可解釋；用 embedding 無法回答「為什麼像」 |
-| **損益兩平解析解** | 商業決策 | 單一預估值依賴樂觀假設；兩平門檻不依賴任何假設，是更硬的結論 |
-| **Streamlit + Plotly** | 互動儀表板 | 決策者要能自己拉滑桿問「如果折扣 15% 呢」，靜態報告回答不了 |
+| 哪一段流失最嚴重？ | 購物車：481 萬次加購中 419 萬次未成交（87.0%） | `outputs/tables/funnel_overall.csv` |
+| 是價格造成的嗎？ | 不是：五個價格帶的加購後放棄率全距約 2.5 個百分點 | `docs/分析報告.md` 模組 1 |
+| 能即時預測購買意圖嗎？ | 前 20% 高分 session 涵蓋 48.8% 的購買者（2.44 倍） | `outputs/tables/model_topk_capture.csv` |
+| 發折扣挽回划算嗎？ | 合理情境年化淨效益 −461,075 ～ −178,069，需 2.63% 挽回率才打平 | `outputs/tables/impact_sensitivity.csv` |
+| 那該做什麼？ | 推動「第一件加購」：0→1 件讓購買率從 7.34% 升到 20.23% | `outputs/tables/cart_curve.csv` |
+| 值多少錢？ | 轉化 5% 零加購 session → 首年淨效益 +123,448，打平門檻 0.98% | `outputs/tables/opportunity_scenarios.csv` |
 
----
+> **貨幣單位**：REES46 行為資料的 `price` 欄位原始來源未標示幣別，本專案一律以「一致的貨幣單位」表述，所有結論都是相對比較（損益兩平門檻、方案對照），不受幣別影響。Sephora 資料則明確為美元（`price_usd`）。
+
+## Demo
+
+儀表板（`streamlit run app.py`）依決策脈絡分成 5 頁：① 問題在哪 → ② 折扣行不行 → ③ 那該做什麼 → ④ 模型細節 → ⑤ 怎麼驗證與限制。以下為本機以 repo 內附的產出檔執行的截圖。
+
+**② 折扣行不行**：拉滑桿調整折扣幅度與挽回率，即時算出年化淨效益與損益兩平門檻。
+
+![折扣試算頁：折扣 10%、挽回率 2% 時年化淨效益 -178,069，打平需 2.63%](docs/images/dashboard-discount.png)
+
+**④ 模型細節**：時間切分下的測試集指標與十分位提升表。
+
+![模型細節頁：測試集 PR-AUC 0.3279、ROC-AUC 0.7625 與十分位購買率](docs/images/dashboard-model.png)
+
+目前沒有線上部署，需在本機執行（見下方「如何執行」）。
 
 ## 架構
 
-```
-資料層                    分析層                        呈現層
-─────────────────────────────────────────────────────────────────
-download.py     ┐
-prepare.py      ├──▶  funnel.py      模組 1 漏斗診斷    ┐
-                │                                        │
-sessions.py     ┤     features.py                        │
-                ├──▶  model_intent.py 模組 2 意圖預測  ──┤──▶ charts.py
-                │            │                           │        │
-                │            ▼ metrics.json              │        ▼
-                ├──▶  impact.py      模組 3 商業量化     │    app.py
-                │     opportunity.py       效益量化      │  export_figures.py
-                │                                        │
-sephora_prep.py ┴──▶  discovery.py   模組 4 探索引擎    ┘
-```
-
-```
-├── app.py                  # Streamlit 儀表板（5 分頁，依決策脈絡組織）
-├── src/
-│   ├── config.py           # 路徑、型別、時間切分、商業假設（單一設定來源）
-│   ├── download.py         # Kaggle 下載，支援手動 zip 備援
-│   ├── prepare.py          # 清洗、轉 parquet、資料品質報告
-│   ├── funnel.py           # 模組 1：轉換漏斗診斷
-│   ├── sessions.py         # 模組 2 前置：觀察窗取捨分析
-│   ├── features.py         # 模組 2：特徵工程（三道防洩漏機制）
-│   ├── model_intent.py     # 模組 2：LightGBM + 十分位提升表
-│   ├── impact.py           # 模組 3：損益兩平與敏感度分析
-│   ├── opportunity.py      # 效益量化：解方能改善多少
-│   ├── sephora_prep.py     # 模組 4 前置：同膚質評分、INCI 成分解析
-│   ├── discovery.py        # 模組 4：膚況導向排序與重疊率分析
-│   ├── charts.py           # 所有圖表的單一定義來源
-│   └── export_figures.py   # 輸出 11 張獨立 HTML 圖檔
-├── docs/
-│   ├── 分析報告.md          # 完整方法與發現
-│   └── 專題規格書.md        # 規格、實作順序、防雷清單、計畫變更紀錄
-├── data/                   # 原始與中繼資料；只有 data/interim/sephora/ 的 3 個檔案進版控
-└── outputs/                # 表格與模型進版控；圖表（outputs/figures/）不進版控
+```mermaid
+flowchart LR
+  subgraph data["資料層"]
+    DL["download.py<br/>Kaggle 下載"] --> PR["prepare.py<br/>清洗、轉 parquet"]
+    SP["sephora_prep.py<br/>同膚質評分、INCI 成分"]
+  end
+  subgraph analysis["分析層"]
+    FN["funnel.py<br/>模組 1 漏斗診斷"]
+    SS["sessions.py<br/>觀察窗取捨"]
+    UH["user_history.py<br/>跨 session 歷史特徵"]
+    FE["features.py<br/>特徵工程＋防洩漏"]
+    MI["model_intent.py<br/>模組 2 LightGBM"]
+    IM["impact.py<br/>模組 3 損益兩平"]
+    OP["opportunity.py<br/>解方效益量化"]
+    DS["discovery.py<br/>模組 4 探索引擎"]
+  end
+  subgraph present["呈現層"]
+    CH["charts.py<br/>圖表單一定義"]
+    APP["app.py<br/>Streamlit 儀表板"]
+    EX["export_figures.py<br/>獨立 HTML 圖檔"]
+  end
+  PR --> FN & SS & UH
+  SS --> FE
+  UH --> FE
+  FE --> MI
+  MI -- "metrics.json<br/>實測 lift" --> IM
+  FE --> OP
+  SP --> DS
+  FN & MI & IM & OP --> T[("outputs/tables/*.csv<br/>outputs/models/")]
+  T --> CH
+  DS --> APP
+  CH --> APP & EX
 ```
 
-**進版控的產出**（以 `git ls-files data outputs` 為準，共 24 個檔案、約 4.1 MB）：
+所有路徑、型別、時間切分與商業假設集中在 `src/config.py`。分析產出（`outputs/tables/` 19 個 CSV、`outputs/models/`、`data/interim/sephora/` 3 個檔案，合計約 4 MB）進版控，所以 clone 下來不必下載約 2.3 GB 原始資料就能直接開儀表板；原始資料與中繼 parquet 不進版控（見 `.gitignore`）。
 
-| 路徑 | 內容 |
+## 技術重點與設計決策
+
+本專案是**傳統機器學習與資料分析**（LightGBM、TF-IDF、貝氏平滑），沒有使用 LLM。
+
+| 決策 | 為什麼 |
 |---|---|
-| `outputs/tables/*.csv`（19 個） | 各模組輸出的分析表，儀表板與 `charts.py` 讀取其中 13 個 |
-| `outputs/models/metrics.json` | 模型評估指標與前 20% 涵蓋率，儀表板與 `impact.py` 讀取 |
-| `outputs/models/intent_lgbm.txt` | 訓練好的 LightGBM 模型（儀表板不讀取） |
-| `data/interim/sephora/products.parquet`、`cohorts.parquet` | Sephora 商品表與同膚質評分表，模組 4 探索引擎讀取 |
-| `data/interim/sephora/stats.json` | 與上兩個檔案同一步驟產出的評論數等統計 |
+| **LightGBM**，不用深度學習 | 33 個特徵的表格問題，梯度提升樹訓練快、可解釋 |
+| **不用 SMOTE／`scale_pos_weight`** | 正樣本約 13%，加權會破壞機率校準，而商業試算需要接近真實的機率 |
+| **時間切分**：2019/10–12 訓練、2020/01 驗證、2020/02 測試 | 隨機切分等於用未來預測過去 |
+| **PR-AUC**，不用 accuracy | 全猜「不買」也有約 87% accuracy |
+| **`gain` 重要度**，不用預設 `split` | 兩者結論相反：`n_cart` 的 `split` 接近墊底，`gain` 卻是第一 |
+| **防洩漏寫成程式碼** | 觀察窗內已購買的 session 排除、`purchase` 事件不進特徵、歷史特徵只用本次 session 之前的資料（`src/user_history.py`）；ROC-AUC > 0.95 自動標記為疑似洩漏 |
+| **模組間自動串接** | `model_intent.py` 寫出 `metrics.json`，`impact.py` 讀取實測涵蓋率。加入歷史特徵後涵蓋率 43.86% → 48.84%，折扣打平門檻自動由 2.34% 改為 2.63% |
+| **合理性檢核** | 敏感度分析把增額訂單換算成佔現有訂單比例，超過 30% 標記為「不可信」並排除 |
+| **兩層貝氏平滑**（同膚質評分） | 評論數 P25 僅 37 則，拆成 4 種膚質後每組約 9 則，直接平均會把雜訊當訊號 |
+| **TF-IDF + 餘弦相似度**（成分相似品） | 成分表是稀疏長尾文本，TF-IDF 足夠且能解釋「為什麼像」 |
+| **損益兩平解析解** | 挽回率無法從歷史資料推得，打平門檻不依賴樂觀假設 |
 
-這些產出進版控，是為了讓 clone 下來的 repo 不必下載約 2.3GB 原始資料、也不必重跑管線，就能直接 `streamlit run app.py`。REES46 的原始與中繼資料（`data/raw/`、`data/interim/*.parquet`、`data/interim/features/`）與 `outputs/figures/` 不進版控，規則見 `.gitignore`。
+開發中發現並修正的 6 個錯誤（例如漏斗以獨立計數相除算出 108% 轉換率、成分子字串比對讓 `ethanol` 命中 `phenoxyethanol`）都保留在 commit 紀錄，修正後的數字都比原本難看，詳見 [分析報告](docs/分析報告.md#這個專案的方法論立場)。其中 3 個寫成回歸測試（`tests/test_correctness.py`）。
 
----
+## 成果與數字
 
-## 工程亮點
+| 指標 | 數值 | 來源 |
+|---|---|---|
+| 測試集（2020/02）PR-AUC／ROC-AUC | 0.3279／0.7625（baseline 購買率 12.62%） | `outputs/models/metrics.json` |
+| 驗證集（2020/01）PR-AUC／ROC-AUC | 0.3263／0.7583 | `outputs/models/metrics.json` |
+| 前 20% 高分 session 涵蓋購買者 | 48.84%（提升 2.44 倍） | `outputs/tables/model_topk_capture.csv` |
+| 加入 10 個使用者歷史特徵 | 測試 PR-AUC 0.2853 → 0.3279 | `docs/分析報告.md` 模組 2 |
+| 同膚質 vs 全站排序 Top 10 重疊率 | 平均 58.9%（約 4.1 項被換掉） | `docs/分析報告.md` 模組 4 |
+| 回歸測試 | 17 passed（`pytest tests/`，2026-10-30 本機執行） | `tests/test_correctness.py` |
 
-**1. 防洩漏機制寫成程式碼，不是寫成註解**
-觀察窗內已購買的 session 從定義上排除、`purchase` 事件永不進特徵、時間切分而非隨機切分。並內建自動警報：`ROC-AUC > 0.95` 直接標記為極可能洩漏。檢查機制要能自動執行，不能只靠記得。
+ROC-AUC 0.76 不算高，但只用 session 前 3 分鐘行為預測購買本來就難；驗證與測試分數幾乎一致，未見過擬合。
 
-**2. 模組間自動串接，不手動抄數字**
-模型訓練寫出 `metrics.json`，商業試算自動讀取實測的 lift curve（48.84%）並標註來源。**這個串接已被實際驗證**：加入使用者歷史特徵後模型變準，涵蓋率由 43.86% 升至 48.84%，商業結論自動跟著往下修 —— 折扣的損益兩平門檻由 2.34% 升到 2.63%。
+## 如何執行
 
-**3. 合理性檢核擋掉幻想數字**
-敏感度分析自動把增額訂單換算成佔現有訂單的比例，超過 30% 標記為「不可信」並排除。若無此機制，10% 挽回率會產出「年增 219 萬」的漂亮數字 —— 但它隱含訂單量成長 53.6%，沒有促銷做得到。
+環境：Python 3.13（開發時使用）。
 
-**4. 圖表單一定義來源**
-11 張圖只在 `charts.py` 定義一次，儀表板與獨立 HTML 共用。先前繪圖邏輯散落兩處，曾導致同一份報告出現互相矛盾的轉換率（58% vs 14.98%）。
-
-**5. 報表數字：計算值與寫死字串並存**
-頂部 KPI 卡、模型指標、折扣試算滑桿與機會情境表的數字，在執行時從 `outputs/` 的表格與 `metrics.json` 計算。但結論摘要、決策鏈卡片與多段圖表說明裡的數字仍是寫死的字串，重跑管線後需要人工同步。其中資料總量「2,069 萬筆」是資料處理階段的固定值：進版控的產出檔沒有記錄這個總數，儀表板執行時也讀不到原始資料。
-
-**6. 六個自我修正的錯誤，全部保留在 commit 紀錄**
-
-| 錯誤 | 影響 |
-|---|---|
-| 漏斗階段以獨立計數相除 | 轉換率算出 108% |
-| 排行榜門檻設在錯誤的欄位 | 僅 30 次加購的品牌登上放棄率榜首 |
-| 折扣浪費以全站平均轉換率估算 | 低估約 3 倍 |
-| 排序比較時兩組使用不同公式 | 個人化效果虛高 41% |
-| 成分以子字串比對 | `"ethanol"` 命中 `phenoxyethanol`，刺激成分比例灌水 3.4 倍 |
-| 敏感度分析未設合理性上限 | 產出隱含訂單成長 56% 的幻想情境 |
-
-**每一個錯誤修正後的數字都比原本難看。** 保留紀錄是因為分析的價值來自結論可信，不是結論漂亮。詳見 [分析報告](docs/分析報告.md)。
-
----
-
-## 快速開始
+**只看儀表板（不需下載資料、不需 API 金鑰）**：
 
 ```bash
 pip install -r requirements.txt
-```
-
-設定 Kaggle API 金鑰（[取得方式](https://www.kaggle.com/settings)，下載 `kaggle.json` 放到 `~/.kaggle/`），然後：
-
-```bash
-python -m src.download && python -m src.prepare && python -m src.funnel
-```
-
-```bash
-python -m src.sessions && python -m src.features && python -m src.model_intent
-```
-
-```bash
-python -m src.impact && python -m src.opportunity
-```
-
-```bash
-python -m src.sephora_prep && python -m src.discovery && python -m src.export_figures
-```
-
-啟動互動儀表板：
-
-```bash
 streamlit run app.py
 ```
 
-> 環境：Python 3.13、32GB RAM。資料下載約 2.3GB，完整流程約 30 分鐘。
-> 不想設定 API 金鑰的話，可直接從 Kaggle 網頁下載 zip 放進 `data/raw/`，程式會自動解壓。
+**執行測試**：
 
----
+```bash
+pip install pytest
+python -m pytest tests/ -v
+```
+
+**從原始資料重跑完整管線**（約 2.3 GB 下載，開發機 32 GB RAM、約 30 分鐘）：先設定 Kaggle API 金鑰（`kaggle.json` 放到 `~/.kaggle/`，或複製 `.env.example` 為 `.env` 填入），再依序執行：
+
+```bash
+python -m src.download && python -m src.prepare && python -m src.funnel
+python -m src.sessions && python -m src.features && python -m src.model_intent
+python -m src.impact && python -m src.opportunity
+python -m src.sephora_prep && python -m src.discovery && python -m src.export_figures
+```
+
+不想設定金鑰，也可以從 Kaggle 網頁下載 zip 放進 `data/raw/`，程式會自動解壓。
+
+## 已知限制與下一步
+
+- **因果性**：加購 1 件的 session 購買率較高，部分是因為那群人本來就更想買。+123,448 是「介入完全有效」的上限，不是預測值，需要 A/B test 驗證（實驗設計見儀表板第 ⑤ 頁）。
+- **假設**：毛利率 45% 與開發成本 30,000 是假設值，定義在 `src/config.py`、`src/impact.py`。
+- **資料品質**：74.14% 的加購在同 session 內沒有瀏覽紀錄，因此核心指標鎖定「加購→購買」；`category_code` 覆蓋率僅 1.81%，品類分析不列入主要結論。
+- **兩份資料不可串接**：REES46 行為流（2019–2020）用於診斷與預測，Sephora 商品評論（2023）只用於探索引擎原型。
+- **部分報表文字寫死**：KPI 卡、模型指標、折扣滑桿與情境表在執行時從 `outputs/` 計算，但結論摘要與部分說明文字是寫死的字串，重跑管線後需人工同步。目前 `app.py` 開頭摘要與第 ③ 頁的對照卡仍寫著加入歷史特徵前的折扣區間（−382,511 ～ −96,849），與最新的 `impact_sensitivity.csv` 不一致。
+- **下一步**：把寫死的結論文字改為從產出檔讀取；以 A/B test 實測挽回率與第一件加購的介入效果。
+
+## 我負責的部分
+
+個人專案，獨立完成：需求定義、資料取得與清洗、特徵工程與建模、商業試算、儀表板、測試與文件。
 
 ## 資料授權
 
@@ -178,6 +153,4 @@ streamlit run app.py
 | [eCommerce Events History in Cosmetics Shop](https://www.kaggle.com/datasets/mkechinov/ecommerce-events-history-in-cosmetics-shop) | [REES46 Marketing Platform](https://rees46.com/) via Open CDP | 免費使用，須標註來源 |
 | [Sephora Products and Skincare Reviews](https://www.kaggle.com/datasets/nadyinky/sephora-products-and-skincare-reviews) | Nady Inky | CC BY 4.0 |
 
-兩份資料集**分屬不同來源、不可串接**。前者為行為流（2019–2020，用於診斷與預測），後者為商品屬性與評論（2023，用於解決方案原型）。此邊界在報告與儀表板中皆明確標註。
-
-本專案程式碼僅供學習與作品集展示用途。
+程式碼以 [MIT License](LICENSE) 釋出；資料集依各自授權使用。

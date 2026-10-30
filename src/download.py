@@ -4,7 +4,7 @@
     python -m src.download
 
 需要先設定 Kaggle API 金鑰，兩種方式擇一：
-  (a) 把 kaggle.json 放到  C:\\Users\\User\\.kaggle\\kaggle.json
+  (a) 把 kaggle.json 放到  ~/.kaggle/kaggle.json（Windows 為 %USERPROFILE%\\.kaggle\\kaggle.json）
   (b) 複製 .env.example 成 .env，填入 KAGGLE_USERNAME / KAGGLE_KEY
 """
 
