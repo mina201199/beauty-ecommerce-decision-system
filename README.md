@@ -98,7 +98,7 @@ sephora_prep.py ┴──▶  discovery.py   模組 4 探索引擎    ┘
 | `outputs/models/metrics.json` | 模型評估指標與前 20% 涵蓋率，儀表板與 `impact.py` 讀取 |
 | `outputs/models/intent_lgbm.txt` | 訓練好的 LightGBM 模型（儀表板不讀取） |
 | `data/interim/sephora/products.parquet`、`cohorts.parquet` | Sephora 商品表與同膚質評分表，模組 4 探索引擎讀取 |
-| `data/interim/sephora/stats.json` | 與上兩個檔案同一步驟產出的評論數等統計 |
+| `data/interim/sephora/stats.json` | 與上兩個檔案同一步驟產出的評論數等統計，儀表板讀取其中的評論總數 |
 
 這些產出進版控，是為了讓 clone 下來的 repo 不必下載約 2.3GB 原始資料、也不必重跑管線，就能直接 `streamlit run app.py`。REES46 的原始與中繼資料（`data/raw/`、`data/interim/*.parquet`、`data/interim/features/`）與 `outputs/figures/` 不進版控，規則見 `.gitignore`。
 

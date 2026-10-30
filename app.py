@@ -4,7 +4,7 @@
     streamlit run app.py
 
 【設計原則】
-第一屏就要給結論，不要先給圖表。看的人（面試官、營運主管）只有 30 秒
+第一屏就要給結論，不要先給圖表。看的人（營運主管）只有 30 秒
 決定要不要繼續看下去 —— 這 30 秒要用來講「發現了什麼」，不是「用了什麼技術」。
 """
 
@@ -20,7 +20,7 @@ from src.config import (
     OBSERVATION_WINDOW_MINUTES,
     TABLE_DIR,
 )
-from src.sephora_prep import NEED_KEYWORDS
+from src.sephora_prep import NEED_KEYWORDS, OUT_DIR as SEPHORA_DIR
 
 st.set_page_config(
     page_title="電商轉換漏斗診斷系統",
@@ -301,9 +301,12 @@ with tab5:
         "既然關鍵是「找到一件想買的」，那商品排序就是最直接的槓桿。"
         "以下用另一份含膚質評論的資料，建立解決方案原型。"
     )
+    # 評論總數讀 sephora_prep 產出的 stats.json，重跑管線後不必再手改這段文字
+    sephora_stats = json.loads((SEPHORA_DIR / "stats.json").read_text(encoding="utf-8"))
     st.warning(
         "**資料邊界**：本頁使用 Sephora 商品與評論資料（2023 年爬取，"
-        "2,420 項 Skincare 商品、109 萬則評論），與前面的 REES46 行為資料"
+        f"2,420 項 Skincare 商品、{sephora_stats['n_reviews'] / 10_000:.0f} 萬則評論），"
+        "與前面的 REES46 行為資料"
         "（2019–2020）分屬不同來源，**不可串接**。這裡建立的是解決方案原型，"
         "不是對同一批用戶的分析。"
     )
