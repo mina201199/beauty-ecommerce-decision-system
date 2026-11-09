@@ -9,6 +9,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from src.config import TABLE_DIR
+from src.features import HISTORY_COLS
 
 FONT = "Microsoft JhengHei, Noto Sans TC, sans-serif"
 
@@ -175,9 +176,16 @@ def decile_lift() -> go.Figure:
 
 
 def feature_importance(top_n: int = 12) -> go.Figure:
-    df = load("model_feature_importance").head(top_n).iloc[::-1]
+    full = load("model_feature_importance")
     cart_kw = ("cart", "remove")
-    colors = [RED if any(k in f for k in cart_kw) else GREY for f in df["特徵"]]
+    # prior_carts 名稱含 cart，但它是跨 session 的歷史特徵；算進來會把歷史的貢獻誤當成當下購物車行為
+    isCart = full["特徵"].map(
+        lambda f: any(k in f for k in cart_kw) and f not in HISTORY_COLS
+    )
+    cartShare = full.loc[isCart, "gain佔比%"].sum()
+
+    df = full.head(top_n).iloc[::-1]
+    colors = [RED if c else GREY for c in isCart.loc[df.index]]
 
     fig = go.Figure(go.Bar(
         x=df["gain佔比%"], y=df["特徵"], orientation="h",
@@ -187,7 +195,7 @@ def feature_importance(top_n: int = 12) -> go.Figure:
     fig.update_xaxes(title="預測貢獻度 gain 佔比 (%)")
     return _base(
         fig, "什麼行為最能預測購買",
-        "紅色為購物車相關特徵，合計佔 70% 預測力；純活躍度幾乎無用",
+        f"紅色為當下 session 的購物車相關特徵，合計佔 {cartShare:.0f}% 預測力；純活躍度幾乎無用",
         height=520,
     )
 
