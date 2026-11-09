@@ -139,7 +139,12 @@ def main() -> None:
     print(f"  假設開發成本            {ASSUMED_DEV_COST:>18,}")
     print(f"  需推動的零加購比例      {be:>17.3%}")
     print(f"  對應 session 數(年)     {meta['zero_cart_sessions'] / econ['月數'] * 12 * be:>18,.0f}")
-    print("\n  對照：10% 折扣方案需要 2.34% 的挽回率才打平，且該成本每年重複發生；")
+    # 折扣門檻由 impact.py 依模型實測涵蓋率算出，模型一改就會變，所以不寫死
+    discountTable = pd.read_csv(
+        TABLE_DIR / "breakeven_by_discount.csv", encoding="utf-8-sig"
+    )
+    breakevenAt10 = discountTable.loc[discountTable["折扣幅度"] == 0.10, "兩平挽回率"].iloc[0]
+    print(f"\n  對照：10% 折扣方案需要 {breakevenAt10:.2%} 的挽回率才打平，且該成本每年重複發生；")
     print("        探索優化的開發成本只付一次，之後每年的效益都是淨賺。")
 
     # ---- 情境 ----

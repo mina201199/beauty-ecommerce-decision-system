@@ -51,6 +51,12 @@ funnel = load_table("funnel_overall").set_index("指標")["值"]
 metrics = load_metrics()
 test_key = "測試(2月)"
 
+sensitivity = load_table("impact_sensitivity")
+plausibleNet = sensitivity.loc[sensitivity["合理性"] == "合理", "淨效益(年化)"]
+# 版面其他地方都用 Unicode 減號「−」，格式化後的連字號要換掉才一致
+worstNet = f"{plausibleNet.min():,.0f}".replace("-", "−")
+bestNet = f"{plausibleNet.max():,.0f}".replace("-", "−")
+
 # ---------------------------------------------------------------- 標題
 st.title("電商轉換漏斗診斷與流失預警系統")
 st.caption(
@@ -59,7 +65,7 @@ st.caption(
 )
 
 st.markdown(
-    """
+    f"""
     <div style="background:linear-gradient(90deg,#F5F3FF,#FDF2F8);
                 border-left:5px solid #7C3AED;
                 padding:20px 24px;border-radius:8px;margin:8px 0 20px">
@@ -71,7 +77,7 @@ st.markdown(
       </div>
       <div style="font-size:15px;color:#475569;margin-top:10px;line-height:1.8">
         87% 的加購沒有成交，但放棄行為與價格無關，因此折扣挽回在合理假設下
-        <b>全數虧損（年化 −382,511 ～ −96,849）</b>。<br>
+        <b>全數虧損（年化 {worstNet} ～ {bestNet}）</b>。<br>
         真正的斷點在更前面：<b>57.6% 的 session 連一件都沒加</b>，
         而加到第一件會讓購買率從 7.34% 跳到 20.23%。
       </div>
@@ -171,10 +177,12 @@ with tab2:
 
     st.plotly_chart(charts.decile_lift(), width='stretch')
     st.plotly_chart(charts.feature_importance(), width='stretch')
+    importance = load_table("model_feature_importance").set_index("特徵")
+    nCartGainShare = importance.loc["n_cart", "gain佔比%"]
     st.warning(
         "**重要度必須看 gain，不能看預設的 split。** "
         "split 只數特徵被拿來分裂幾次，會嚴重偏袒價格、時間間隔這類連續型高基數特徵。"
-        "本專案兩者都輸出：`n_cart` 的 split 排名接近墊底，gain 卻是第一名（34.9%），"
+        f"本專案兩者都輸出：`n_cart` 的 split 排名接近墊底，gain 卻是第一名（{nCartGainShare:.1f}%），"
         "兩種指標會導向完全相反的結論。"
     )
     st.plotly_chart(charts.window_tradeoff_chart(), width='stretch')
@@ -221,9 +229,11 @@ with tab3:
             "數字雖然算得出來，但不應納入決策。"
         )
     elif recovery < breakeven:
+        discountTable = load_table("breakeven_by_discount")
+        breakevenAt5 = discountTable.loc[discountTable["折扣幅度"] == 0.05, "兩平挽回率"].iloc[0]
         st.warning(
             f"假設的挽回率 {recovery:.2%} 低於打平門檻 {breakeven:.2%}，此方案虧損。"
-            f"若折扣降至 5%，門檻可降到約 1.02%。"
+            f"若折扣降至 5%，門檻可降到約 {breakevenAt5:.2%}。"
         )
     else:
         st.success(f"挽回率 {recovery:.2%} 高於打平門檻 {breakeven:.2%}，方案成立。")
@@ -267,7 +277,7 @@ with tab5:
     q1.metric("打平所需轉化率", "0.98%", "把零加購推到加購一件")
     q2.metric("5% 轉化的首年淨效益", f"+{row5['首年淨效益']:,.0f}",
               f"訂單成長 {row5['訂單成長%']:.1f}%")
-    q3.metric("對照：10% 折扣方案", "−96,849 ～ −382,511",
+    q3.metric("對照：10% 折扣方案", f"{bestNet} ～ {worstNet}",
               "合理情境全數虧損", delta_color="inverse")
 
     show_opp = opp[["轉化比例", "年化增額訂單", "訂單成長%",
