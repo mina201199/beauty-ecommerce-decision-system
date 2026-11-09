@@ -160,6 +160,8 @@ def decile_lift() -> go.Figure:
         x=df["十分位"], y=df["該組購買率%"], name="該組購買率",
         marker_color=[BLUE if i < 3 else GREY for i in range(len(df))],
         text=[f"{v:.1f}%" for v in df["該組購買率%"]], textposition="outside",
+        # Plotly 自動範圍不一定替最高那根的外側標籤留足空間，允許標籤畫出繪圖區才不會被裁掉
+        cliponaxis=False,
     ))
     fig.add_hline(
         y=base, line={"color": RED, "dash": "dash"},
